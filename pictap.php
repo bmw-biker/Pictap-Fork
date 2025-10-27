@@ -2,7 +2,7 @@
 /* Pictap Gallery https://github.com/bmw-biker/Pictap-Fork */
 
 const PIC_VER_ORG = ['2.0.9',3]; //[main, config]]
-const PIC_VER = ['2.0.9.1',3]; //[main, config]]
+const PIC_VER = ['2.0.9.2',3]; //[main, config]]
 
 ### Changelog ###
 ### 2.0.8.1
@@ -25,7 +25,7 @@ const PIC_VER = ['2.0.9.1',3]; //[main, config]]
 ### 2.0.9.1
 # Changes with * have been included by junkfix version 2.0.9
 # FEATURE	*	merged changes of junkfix version 2.0.9
-# FEATURE 15	browser tab title configurable (same as page title instead of local Pictap dirpath)
+# FEATURE 15	browser tab title configurable (same as page title, instead of local Pictap dirpath)
 # FIXED 17		gallery didn't show any folders if name_regex didn't exist (eg. after update from 2.0.8 to 2.0.8.1-3)
 # FIXED	*		delete Album: right click, remove album -> Error: You have an error in your SQL syntax
 # FEATURE 19	create random public url name for public albums
@@ -33,15 +33,12 @@ const PIC_VER = ['2.0.9.1',3]; //[main, config]]
 # FEATURE 21	all info text same brightness (city link was color 'a')
 # FEATURE 22	log if IP gets blocked
 # FEATURE 23	adapted folder color to gray design
-# TODO 		add http_get push message (eg. https://pushover.net/) --- in work ...
+### 2.0.9.2
+# FEATURE 25	http_get push message if user gets blocked
 
 # BUG generate video thumb from MP4 doesn't work on Diskstation DSM7
-# TODO	notify admin if user gets blocked, eg push message, warning on his page,...
 # TODO	create shared folder links
 # TODO	the title favicon is working with the svg/png - but when creating a browser favorite the svg/png doesn't work
-
-# TODO	is there an option to reset failed login count earlier ?  currently if user most times is correct but sometimes fails login within 7 days he will get blocked
-# TODO	as of config a login will be stored for n days. how to deal with same login from different IPs. how to deal with login over internet which is one IP (ProxyPI).
 
 # TODO	after login redirect (F20): if page not allowed for user then redirect to root ? (eg. albums, settings...) currently: album: just hangs, settings: white error page ----- ATTENTION about endless loops ??????????????????????
 # TODO	show image info for shared albums
@@ -1720,6 +1717,8 @@ function userAuth($html=0){
 							# FEATURE 22	log blocked IP
 							$t='['.date("Y-m-d H:i:s").'] ['.$_SERVER['REMOTE_ADDR'].'] IP BLOCKED FOR '.PICTAP->login_block_days.' DAYS AFTER '.PICTAP->login_attempts." FAILED LOGINS !!!\n";
 							@file_put_contents(PICTAP->path_data.'/failed_logins.log', $t, FILE_APPEND);
+							# FEATURE 25	blocked IP push message
+							push_message('User '.$u.' got blocked on IP '.$_SERVER['REMOTE_ADDR']);
 						}
 					}
 					login_page($attempt);
@@ -1757,6 +1756,50 @@ function userAuth($html=0){
 
 	define('USER', $user);
 }
+
+
+# FEATURE 25	encode push message query
+function url_encode_query($url) {
+	$e = strpos($url, '?');
+	if ($e === false) { return $url; }
+	$r = substr($url, 0, $e);
+	// logger('[url_encode_query] '.$r);
+	do {
+		$b = $e;
+		$e = strpos($url, '=', $b);
+		if($e === false) { $e = strlen($url); }
+		$r .= substr($url, $b, $e - $b + 1);
+		// logger('[url_encode_query] '.$r);
+		$b = $e+1;
+		$e = strpos($url, '&', $b);
+		if($e === false) { $e = strlen($url); }
+		// $r .= substr($url, $b, $e - $b + 1);
+		$r .= rawurlencode(substr($url, $b, $e - $b));
+		// logger('[url_encode_query] '.$r);
+	} while ($e < strlen($url));
+	return $r;
+}
+
+# FEATURE 25	push message
+function push_message($msg) {
+	if( ! PICTAP->push_url) { return; }
+	$pm = PICTAP->push_url;
+	$pm = str_replace('#HDR#',PICTAP->title,$pm);
+	$pm = str_replace('#MSG#',$msg,$pm);
+	$pm = url_encode_query($pm);
+	logger('[push_message] '.$pm);
+	$ch = curl_init($pm);
+	curl_setopt($ch, CURLOPT_CUSTOMREQUEST, 'POST');
+	curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+
+	# pushover message:
+	# https://api.pushover.net/1/messages.json?priority=0&title=Photo Album&message=User blocked&token=a24r4cgnxnzfngc3ewhtna1y4x6cre&user=u8w5pv1xjtr5o14i2djotqn1z2j2xb
+	
+	$curlResponse = curl_exec($ch);
+	logger($curlResponse);
+	curl_close($ch);
+}
+
 
 function userform($id,$user){
 	$req = ' ';
@@ -2024,6 +2067,8 @@ function pageConfig($oldsetup){
 		'login_remember' => ['number', 90, 1, 'Days to Remember Login'],
 		'login_attempts' => ['number', 5, 1, 'Block IP after Failed Attempts'],
 		'login_block_days' => ['number', 7, 1, 'Days to ban ip for'],
+		# FEATURE 25	http push message
+		'push_url'			=> ['text', '', 0, 'push error messages (user blocked) over http eg. to pushover ($msg inserts the text)'],
 		'ext_images' 	=> ['text', 'jpg,jpeg,png,gif,webp,bmp,avif,tiff,tif,wbmp,xbm', 1, 'eg. jpg,png'],
 		'ext_videos' 	=> ['text', 'mp4,m4v,m4p,webm,ogv,mkv,avi,mov,wmv,mpg,mpeg,vob', 0, 'eg. mp4,mov'],
 		'ext_uploads' 	=> ['text', 'pdf,doc,docx,txt', 0, 'Allowed extra upload types eg. pdf,txt or * for all'],
