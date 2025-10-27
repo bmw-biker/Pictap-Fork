@@ -8,17 +8,10 @@ Playing arround with Pictap now for some time I noticed some wishes for improvem
 After some success I'ld like to share the new features and modifications I managed to implement.\
 I hope to have id'd all the modifications correctly in the code so you can identify changes belonging together.
 
-### Currently working on
+### Version 2.0.9.2
 - **Push message for errors**\
     Push http message to eg. pushover.net if eg. if user gets blocked.
-- **Try to make folders public accessable**
-    - Public albums are already possible.
-    - Although they have some slight side effect:
-        - We have to create an album for makeing them public.
-        - Pictures currently don't show any information (location,...)
-        - We cannot use the folder structure.
-    - What if we just could share some subfolder with no rights but display images.
-    - Currently trying to understand and solve some security issues.
+
 ### Version 2.0.9.1
 - **Browser tab title**\
   Set the browser tab title same as the configured page title.
@@ -87,12 +80,23 @@ I hope to have id'd all the modifications correctly in the code so you can ident
   This is because checkboxes only submit their value if checked. If we uncheck and submit no information from this checkbox will be submitted.\
   One solution: In itick() we have to add a hidden input with value 0 which will be submitted if the checkbox itself is unchecked and doesn't submit.\
 	See https://mimo.org/glossary/html/checkbox "Form Submission and Checkbox Value Behavior"
+
 ### Non software modifications
 - **Updated gps.sql with more locations**\
   Found that [umer2001/py_countries_states_cities_database](https://github.com/umer2001/py_countries_states_cities_database/raw/refs/heads/master/) in our surroundings and also places we visited contains more small towns.\
   The new gps.sql I converted from its json files.\
   Note that it obviously must be bigger than the original which appears to be no issue for my DS224+.\
   Many thanks to [umer2001](https://github.com/umer2001).\
+
+### Currently working on
+- **Try to make folders public accessable**
+    - Public albums are already possible.
+    - Although they have some slight side effect:
+        - We have to create an album for makeing them public.
+        - Pictures currently don't show any information (location,...)
+        - We cannot use the folder structure.
+    - What if we just could share some subfolder with no rights but display images.
+    - Currently trying to understand and solve some security issues.
 <br><br>
 
 
