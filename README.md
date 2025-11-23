@@ -24,6 +24,7 @@ I hope to have id'd all the modifications correctly in the code so you can ident
     - On creation the link will be copied to the clipboard.
     - If a link already exists for the folder it can be removed or copied to clipboard.
     - A checkbox to allow sharing has been added to the user rights menu.
+    - An external share url input has been added to settings page. Use this if managing shares from local url but want to share on public url.
   - Technical
     - On link creation a folder 'id' will be created in folder 'shared'.
     - The folder will contain 2 symlinks: Picture path and thumbs path.
