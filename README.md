@@ -36,7 +36,12 @@ I hope to have id'd all the modifications correctly in the code so you can ident
     - Linux on Synology Diskstation running DSM 7.3.1, PHP 8.2.28, MariaDB 10.11.6
     - Windows 10, Xampp 3.3.0, MariaDB 10.4.32\
       ATTENTION: Xampp must be run with admin rights to enable symlinks !
+  - Known issues
+    - Using current .htaccess to restrict access will not work.\
+      The login window will popup.\
+      This is because of the currently new/different cookie name used.
   - TODO
+    - Use same cookie name as gallery or update .htaccess to accept the new cookie.
     - Security issues known
       - Currently the whole pictures tree will be transmitted as with usual gallery.\
         This we could avoid.
