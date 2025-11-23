@@ -1,4 +1,4 @@
-/*! Pictap Gallery 2.0.9.1
+/*! Pictap Gallery 2.0.9.3
 https://github.com/junkfix/Pictap */
 
 
@@ -1522,6 +1522,11 @@ function updateDirSize(){
 
 function thumbUrl(did, file, mt){
 	let p = Dir.d[did][0];
+	// MODIFIED 24	folder link: eliminate root folder
+	let rt = Dir.d[Dir.root][0];
+	if(p.startsWith(rt)){
+		p = p.replace(rt,'');
+	}
 	if(p !== ''){p+='/';}
 	p = p + removeExt(file);
 	p = p.split('/').map(f => encodeURIComponent(f)).join('/');
@@ -1532,6 +1537,9 @@ function thumbUrl(did, file, mt){
 
 
 async function buildMenu(){
+	// FEATURE 24	folder link: don't build menu if not exists
+	if( ! document.querySelector('#sidebar')) return;
+
 	const rule = morderget();
 	if(!rule.az){rule.az = msorter.default[rule.i];}
 	const menuArr = (id) => {
@@ -1613,6 +1621,13 @@ async function buildMenu(){
 			_ce('a',{href: '?a=Albums'},0,[
 				_ce('u',{'class':'ico-album'}),
 				_tn('Albums')
+			])
+		),
+		// FEATURE 24	folder link: add menu item
+		_ce('li',0,0,
+			_ce('a',{href: '?dspsh=all'},0,[
+				_ce('u',{'class':'ico-share'}),
+				_tn('Shared Folders')
 			])
 		),
 		_ce('li',0,0,
@@ -1819,6 +1834,9 @@ async function cMenu(e,dhis,who,rpt){
 						let x = _att(dhis,'data-d')
 						fsTask('refresh', [x+'//0/dir'], Dir.d[x][0], li);
 						break;
+					// FEATURE 24	folder link
+					case "sharefolder":
+						act_sharefolder(dhis); break;
 				}
 				break;
 			}
@@ -2007,6 +2025,8 @@ async function cMenu(e,dhis,who,rpt){
 		albumm: 'Manage Album',
 		thumb: 'Set as Thumbnail',
 		refresh: 'Rescan',
+		// FEATURE 24	folder link
+		sharefolder: 'Share',
 	};
 
 	const cm = _id('cmenu');
@@ -2101,7 +2121,8 @@ async function cMenu(e,dhis,who,rpt){
 		}
 		case 'dir':{
 			// directory's right click (long press on mobile phone) menu
-			for(const i of 'info,refresh,rename,move,delete'.split(',')){
+			// FEATURE 24	folder link
+			for(const i of 'info,refresh,rename,move,delete,sharefolder'.split(',')){
 				if(!_p.can[i]){continue;}
 				const li = _ce('li');
 				li.innerHTML = '<i class="ico-'+i+'"></i> '+items[i];
@@ -2662,6 +2683,131 @@ function act_rename(id){
 
 }
 
+
+// FEATURE 24	folder link: copy to clipboard
+async function to_clipboard(t,v) {
+	await navigator.clipboard.writeText(v)
+    .then(() => {
+			toast("Copied "+t+" to clipboard",{timeout:3,close:0});
+		})
+		.catch(() => {
+			toast("Couldn't copy "+t+" to clipboard",{theme:'red',timeout:0});
+		});
+}
+
+// FEATURE 24	folder link: gallery click
+async function act_sharefolder(id) {
+	const [fid,d,name,fileid,single] = getselected(id);
+	if(!fid){return;}
+
+	shareFolderPopup(d, name);
+}
+
+// FEATURE 24	folder link: shares list click
+async function shareFolderPopup(d, name, reload=null){
+	let l = window.location.href;
+	l = l.substring(0, l.indexOf('?'));
+	let share = randomString(20);
+	// share exists flag
+	let shx = 0;
+
+	// fetch link from server
+	try {
+		// request share dir folder id
+		const response = await fetch(l+'?shdir='+d,{});
+		const js = await response.json();
+		if(js.share && (js.share != 'null')){
+			share = js.share;
+			shx=1;
+		}
+		if(js.puburl && (js.puburl != 'null')){
+			l = js.puburl;
+		}
+	} catch(e) {
+		toast('Cannot show or create link.',{theme:'red',timeout:3,close:0}); return;
+	}
+
+	const el = _ce('div');
+	// const fd = _ce('div');
+	// fd.innerText = 'Folder: ' + name;
+	// el.appendChild(fd);
+
+	let su = l + '?share=' + share;
+
+	const sd = _ce('div');
+	const sc = _ce('code');
+	sd.appendChild(sc);
+	sc.innerText = su;
+	el.appendChild(sd);
+
+	if(shx){
+		popup(el, 'Manage Folder Link: '+name, {
+			buttons: [
+				{
+					text: "Cancel",
+				}, {
+					text: "Copy to Clipboard",
+					click: (html) => {
+						to_clipboard('URI',su);
+						return true;
+					},
+					key: "Enter",
+					def: 1,
+				}, {
+					text: "Delete",
+					click: (html) => {
+						popup('Remove share '+name,'Confirmation', {
+							buttons: [
+								{
+									text: "No"
+								}, {
+									text: "Yes",
+									click: (html) => {
+										post({params:'task=shfld&act=rem&id='+d,
+											complete: function(j){
+												if(reload){
+													location.reload();
+												}
+												toast(j.msg,j.ok?{}:{theme:'red',timeout:0});
+											}
+										});
+										return true;
+									},
+									key: "Enter",
+									def: 1
+								}
+							],
+							bgclose: 0
+						});
+					},
+				}
+			],
+			bgclose: 0
+		});
+	}else{
+		popup(el, 'Create Folder Link: '+name, {
+			buttons: [
+				{
+					text: "Cancel",
+				}, {
+					text: "Create",
+					click: (html) => {
+						to_clipboard('URI',su);
+						post({params:'task=shfld&act=add&id='+d+'&share='+share,
+							complete: function(j){
+								toast(j.msg,j.ok?{}:{theme:'red',timeout:0});
+							}
+						});
+						return true;
+					},
+					def: 1,
+				}
+			],
+			bgclose: 0
+		});
+	}
+}
+
 function act_refresh(id){
 	const [fid,d,name,fileid,single] = getselected(id);
 	if(!fid){return;}
@@ -2884,7 +3030,7 @@ function editAlb(aid,make,add){
 	const sh = itick('s','Public', a.share);
 	sh.i.onchange = ()=>{
 		if(sh.i.checked){
-			// FEATURE 19	usse random if checked
+			// FEATURE 19	use random if checked
 			if(!sn.value){
 				if(rd.i.checked) {
 					sn.value = randomString(20);
@@ -3711,7 +3857,7 @@ async function media(j, n, f, m ){
 	}else if(navi.mode=='d'){
 		const [dirpath, pid, mt, sz, qt] = Dir.d[navi.dir];
 		tSz = sz; tQt = qt;
-		// FEATURE 15	show main page title instead of local Pictap dirpath
+		// FEATURE 15	browser tab title show main page title instead of local Pictap dirpath
 		const tl = (dirpath.length)? dirpath : _p.title;
 		// const tl = (dirpath.length)? dirpath : _p.url_pictures + '/';
 		tTl = tl.split('/').join(' / ');
@@ -3823,8 +3969,16 @@ async function media(j, n, f, m ){
 
 		const ext = getExt(v.n).toLowerCase();
 
+		// MODIFIED 24	folder link: eliminate root folder
+		let pp = p;
+		let rt = Dir.d[Dir.root][0] + '/';
+		if(pp.startsWith(rt)){
+			pp = pp.replace(rt,'');
+		}
+		pp = _p.url_pictures + '/' + pp;
+		const ah = _ce('a', {'class': 'file', href: pp + '?mt='+v.t, id: 'imt'+ii, 'data-s': v.s, 'data-i': v.i, 'data-d': v.d, 'data-tick': '0','data-ori': (v.ori ? v.ori : 0), style: '--ratio:'+((v.h) ? v.w + '/' + v.h : '4/3')});
 		// MODIFIED 11	show DTOriginal on photo + in info popup (v.t instead of v.m)
-		const ah = _ce('a', {'class': 'file', href: _p.url_pictures + '/' + p + '?mt='+v.t, id: 'imt'+ii, 'data-s': v.s, 'data-i': v.i, 'data-d': v.d, 'data-tick': '0','data-ori': (v.ori ? v.ori : 0), style: '--ratio:'+((v.h) ? v.w + '/' + v.h : '4/3')});
+		// const ah = _ce('a', {'class': 'file', href: _p.url_pictures + '/' + p + '?mt='+v.t, id: 'imt'+ii, 'data-s': v.s, 'data-i': v.i, 'data-d': v.d, 'data-tick': '0','data-ori': (v.ori ? v.ori : 0), style: '--ratio:'+((v.h) ? v.w + '/' + v.h : '4/3')});
 		//const ah = _ce('a', {'class': 'file', href: _p.url_pictures + '/' + p + '?mt='+v.m, id: 'imt'+ii, 'data-s': v.s, 'data-i': v.i, 'data-d': v.d, 'data-tick': '0','data-ori': (v.ori ? v.ori : 0), style: '--ratio:'+((v.h) ? v.w + '/' + v.h : '4/3')});
 
 		v.ft = _p.ext_images.includes(ext)? 1 : (_p.ext_videos.includes(ext)? 2 : 0);

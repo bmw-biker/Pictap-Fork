@@ -2,7 +2,8 @@
 /* Pictap Gallery https://github.com/bmw-biker/Pictap-Fork */
 
 const PIC_VER_ORG = ['2.0.9',3]; //[main, config]]
-const PIC_VER = ['2.0.9.2',3]; //[main, config]]
+// FEATURE 24	folder link: increment config version to force sql update
+const PIC_VER = ['2.0.9.3',4]; //[main, config]]
 
 ### Changelog ###
 ### 2.0.8.1
@@ -35,14 +36,18 @@ const PIC_VER = ['2.0.9.2',3]; //[main, config]]
 # FEATURE 23	adapted folder color to gray design
 ### 2.0.9.2
 # FEATURE 25	http_get push message if user gets blocked
+### 2.0.9.3
+# FEATURE 24	folder link: access folders by direct link
 
-# BUG generate video thumb from MP4 doesn't work on Diskstation DSM7
-# TODO	create shared folder links
-# TODO	the title favicon is working with the svg/png - but when creating a browser favorite the svg/png doesn't work
+# BUG generate video thumb from MP4 doesn't work on Diskstation DSM7, mysql
+
+# TODO	the title favicon is working with the svg/png - but when copying browser favorite to Windows desktop the svg/png doesn't work
+
+# TODO	as of config a login will be stored for n days. how to deal with same login from different IPs. how to deal with login over internet which is one IP (ProxyPI).
 
 # TODO	after login redirect (F20): if page not allowed for user then redirect to root ? (eg. albums, settings...) currently: album: just hangs, settings: white error page ----- ATTENTION about endless loops ??????????????????????
 # TODO	show image info for shared albums
-# TODO	add folder description
+# TODO	add folder description, several languages ?
 # TODO	sort: save user selection
 # TODO	backup gallery database
 # TODO	support .ico files  - not directly possible with PHP
@@ -150,7 +155,6 @@ if(PTM){ //main page, not a shared album view
 		unset($r['name']);
 		$q['items'][] = $r;
 		$i++;
-		
 	}
 	if(!$i){http_response_code(404);die;}
 	$an = "$an ($i)";
@@ -1110,6 +1114,16 @@ function menuList(){
 		$p = intval($r['parentid']);
 		$l = [ $r['dir'], $p, (int)$r['mt'], (int)$r['sz'], (int)$r['qt'] ];
 		$menu[$r['dirid']] = $l;
+		# FEATURE 24	folder link: if USER->dirlink -> $root, $home = USER->dirlink
+		# we only need to set once
+		if ($home != 0) { continue; }
+		if (isset(USER->sharedirid) && USER->sharedirid === $r['dirid']) {
+			$home = USER->sharedirid;
+			// $root = $p;
+			$root = USER->sharedirid;
+			// logger('[menuList] sharedirid:'.USER->sharedirid);
+			continue;
+		}
 		if (userCan('ownfolder')) {
 			if($r['dir'] === $user){
 				$home = (int)$r['dirid'];
@@ -1288,7 +1302,8 @@ function userCan($cando, $role=null) {
 
 function roleList($role=null){
 	$x=[];
-	foreach(explode(',','admin,alldir,login,family,upload,search,edit,rename,move,delete,album,newdir,ownfolder') as $k=>$v){
+	// FEATURE 24	folder link
+	foreach(explode(',','admin,alldir,login,family,upload,search,edit,rename,move,delete,album,newdir,ownfolder,sharefolder') as $k=>$v){
 		$c = 1 << $k;
 		if($role !== null){
 			$c = ((($role & $c) === $c)? 1 : 0);
@@ -1648,6 +1663,68 @@ function getUser($u){
 	return null;
 }
 
+
+# BUG currently .htaccess refuses requests with no "pictap" cookie - maybe use the same instead of "shareid" ?
+# BUG thumbs access is full folder --- make with symlink ?
+# BUG currently role must include login + alldir --- WHY 
+# BUG currently the whole dir tree is being transmitted
+# FEATURE 24	folder link: create user from folder key
+function getShareUser(){
+	# create a temporary user if we receive a shareid for a folder
+	# the folder shareid we expect from either of 2 sources:
+	# - from query parameter when the user first uses the link he was given
+	# - from cookie where we stored the shareid from first access
+	# return null (forcing normal login) if the shareid we receive is not in our db shareids table
+	$cook = 'shid';
+	$cookietimeout = 60*60*8;	
+
+	# try get shareid from request
+	$shareid = get('share');
+	// logger('[getShareUser.get] shareid:'.$shareid);
+	if( ! $shareid ) {
+		# else try get from cookie
+		if(isset($_COOKIE[$cook]) && is_string($_COOKIE[$cook])) {
+			$shareid = $_COOKIE[$cook];
+			// logger('[getShareUser.cookie] shareid:'.$shareid);
+		} else {
+			# no shareid found -> continue with normal login
+			unset($_COOKIE[$cook]);
+			return null;
+		}
+	}
+	# get folder id from db
+	if( ! ($dbo = openDb())) { unset($_COOKIE[$cook]); return null; }
+	$stmt = $dbo->run("SELECT * FROM shares WHERE shareid = ?", [$shareid], 1, __LINE__);
+	$stmt = $stmt ?: [];
+	if ( count($stmt) === 0 ) { unset($_COOKIE[$cook]); return null; }
+	
+	// logger('[getShareUser] shareid:'.implode(',',$stmt));
+
+	# found the share, remember in cookie
+	if( ! isset($_COOKIE[$cook]) ) {
+		setcookie($cook, $shareid, time() + $cookietimeout, "/");
+	}
+
+	# create temporary user with special property shareid = dirid and very reduced role = ownFolder
+	# id, username, password: we shouldn't need -> set a fake
+	# hash: here we remember the folder id
+	// $user = (object)['id'=>9999,'user'=>'Hello','pass'=>'','hash'=>'','role'=>0x6+ROLES->ownfolder,'sharedirid'=>$stmt['dirid']];
+	$user = (object)[
+		'id'=>3,
+		'user'=>'TempShareUser',
+		'pass'=>'',
+		'hash'=>'',
+		'role'=>ROLES->ownfolder+ROLES->login+ROLES->alldir,
+		'sharedirid'=>$stmt['dirid'],
+		'sharepath'=>PICTAP->url_shared .DIRECTORY_SEPARATOR. $shareid
+	];
+	// logger('[getShareUser.user] id:'.$user->id.', user:'.$user->user.', pass:'.$user->pass.', hash:'.$user->hash.', role:'.$user->role.', sharedirid:'.$user->sharedirid, 2);
+	define('USER', $user);
+
+	return $user;
+}
+
+
 function saveLogin($f){
 	return (makeDir(dirnm($f)) && file_put_contents($f,''));
 }
@@ -1665,6 +1742,9 @@ function userAuth($html=0){
 	if($html && !file_exists(PICTAP->path_pictures)) {
 		error('path_pictures missing.');
 	}
+
+	# FEATURE 24	folder link: get user from share if available 
+	if( getShareUser() ) { return; }
 
 	$c=isset($_COOKIE[$cook]) && is_string($_COOKIE[$cook]) ? $_COOKIE[$cook] : '';
 	[$user] = explode('-', $c . '');
@@ -1710,7 +1790,7 @@ function userAuth($html=0){
 					$t='['.date("Y-m-d H:i:s").'] ['.$_SERVER['REMOTE_ADDR'].'] '.$u.' - '.$p.' '.htmlspecialchars($_SERVER['HTTP_USER_AGENT'])."\n";
 					@file_put_contents(PICTAP->path_data.'/failed_logins.log', $t, FILE_APPEND);
 					if(!$iplist){
-						@file_put_contents($ip, ' ', FILE_APPEND);
+						@file_put_contents($ip, '.', FILE_APPEND);
 						if(intval(@filesize($ip)) > PICTAP->login_attempts){
 							@unlink($ip);
 							@file_put_contents($bip, '', FILE_APPEND);
@@ -2069,6 +2149,8 @@ function pageConfig($oldsetup){
 		'login_block_days' => ['number', 7, 1, 'Days to ban ip for'],
 		# FEATURE 25	http push message
 		'push_url'			=> ['text', '', 0, 'push error messages (user blocked) over http eg. to pushover ($msg inserts the text)'],
+		# FEATURE 24	folder link: public url
+		'public_url'			=> ['text', '', 0, 'Public URL being used for sharing folders (leave empty if default server URL shall be used)'],
 		'ext_images' 	=> ['text', 'jpg,jpeg,png,gif,webp,bmp,avif,tiff,tif,wbmp,xbm', 1, 'eg. jpg,png'],
 		'ext_videos' 	=> ['text', 'mp4,m4v,m4p,webm,ogv,mkv,avi,mov,wmv,mpg,mpeg,vob', 0, 'eg. mp4,mov'],
 		'ext_uploads' 	=> ['text', 'pdf,doc,docx,txt', 0, 'Allowed extra upload types eg. pdf,txt or * for all'],
@@ -2202,6 +2284,20 @@ function pageConfig($oldsetup){
 				$setup = (object) myConfig($input);
 				$msg .= '<div>Tables Created</div>';
 			}
+			# $FEATURE 24	folderlink: force sql update if old config version < 4
+			else if($oldver < '4'){
+				$tf = $setup->path_data .'/tables-'.$setup->db_type.'.sql';
+				$t = @file_get_contents($tf);
+				if(!$t){error('missing '.$tf);}
+				$q = str_replace('/*#*/', $dpf, $t);
+				if(!($dbo = openDb($setup))){error('openDB Error');}
+				try {
+					$dbo->exec($q);
+				}catch(Exception $e) {
+					error('Table Error: '. $e->getMessage());
+				}
+				$msg .= '<div>Tables Updated</div>';
+			}
 			if(($dbo = openDb($setup))){
 				foreach ($setup as $k=>$v){
 					if($k=='users'){continue;}
@@ -2312,6 +2408,124 @@ function remSymLinks($d,$s=0){
 }
 
 
+// FEATURE 24	folder link: check if running on Windows
+function isWindowsOS(){
+	return str_starts_with(strtolower(PHP_OS), 'win');
+}
+
+// FEATURE 24	folder link: delete symlink
+function remSymlink($lnk){
+	// REMARK 24	folder link: unfortunately removing symlink on Windows works differently than on Linux
+	if(isWindowsOS()) {
+		return @rmdir($lnk);
+	} else {
+		return @unlink($lnk);
+	}
+}
+
+// FEATURE 24	folder link: send last file system error
+function sendLastError(){
+	sendjs(0,error_get_last()['message']);
+}
+
+// FEATURE 24	folder link: get share
+function getFolderShare($id){
+	if( ! ($dbo = openDb()) ||
+		($stmt = $dbo->run("SELECT * FROM `shares` WHERE dirid = {$id};", null, 1, __LINE__)) === false) 
+		{ http_response_code(500); exit; }
+	return $stmt;
+}
+
+// FEATURE 24	folder link: get all shares
+function getFolderShares(){
+	if( ! ($dbo = openDb()) ||
+		($stmt = $dbo->run("SELECT * FROM `shares` WHERE 1;", null, 2, __LINE__)) === false) 
+		{ http_response_code(500); exit; }
+	foreach($stmt as &$s){
+		if(($d = $dbo->run("SELECT * FROM `dirs` WHERE `dirid`=".$s['dirid'].";", null, 1, __LINE__)) === false){ http_response_code(500); exit; }
+		// logger("[getFolderShares] dirid=".$s['dirid'].", dir=".$d['dir']);
+		$s['dir'] = $d['dir'];
+	}
+	$dnames = array_column($stmt, 'dir');
+	array_multisort($dnames, SORT_ASC, $stmt);
+	return $stmt;
+}
+
+// FEATURE 24	folder link: add share
+function addFolderShare($id,$pp,$sh){
+	if( ! $id){http_response_code(400); exit;}
+	$pw = '';
+	$mt = time();
+	$et = 0;
+	if( ! ($dbo = openDb())) { sendjs(0,'Db Error'); return; }
+	if(($stmt = $dbo->run("INSERT INTO `shares` (`shareid`, `dirid`, `password`, `mt`, `et`) VALUES ('$sh', $id, '$pw', $mt, $et);",null,1,__LINE__)) === false){
+		sendjs(0,$dbo->myerr());
+		return;
+	}
+	$sp = $_SERVER['DOCUMENT_ROOT'].PICTAP->url_shared.'/'.$sh;
+	// create directory which holds pic link and thumb link
+	if( ! @mkdir($sp)){ sendLastError(); }
+	// REMARK FEATURE 24	on Windows symlink needs admin rights (start xampp with admin)
+	// symlink to pictures
+	if( ! @symlink($pp,$sp .'/p')){ sendLastError(); }
+	// symlink to thumbs
+	// BUG we need the thumbs path instead of $pp pictures path
+	$tp = str_replace(PICTAP->path_pictures, PICTAP->path_thumbs, $pp);
+	if( ! @symlink($tp,$sp .'/t')){ sendLastError(); }
+	sendjs(1,"Set Share");
+}
+
+// FEATURE 24	folder link: remove share
+function remFolderShare($id){
+	if( ! $id){http_response_code(400); exit;}
+	if( ! ($dbo = openDb())) { sendjs(0,'Db Error'); return; }
+	$delsh = getFolderShare($id);
+	if(($stmt = $dbo->run("DELETE FROM shares WHERE `shares`.`dirid`='$id';",null,1,__LINE__)) === false){
+		sendjs(0,$dbo->myerr());
+		return;
+	}
+	$sp = $_SERVER['DOCUMENT_ROOT'].PICTAP->url_shared.'/'.$delsh['shareid'];
+	// remove all links in directory
+	if( ! remSymlink($sp .'/p')){ sendLastError(); }
+	if( ! remSymlink($sp .'/t')){ sendLastError(); }
+	// remove share directory
+	if( ! @rmdir($sp)){ sendLastError(); }
+	sendjs(1,"Removed Share");
+}
+
+// FEATURE 24	folder link: format date
+function fdate($d){
+	if(!$d){return;}
+	return date('d.m.Y H:i', $d);
+}
+
+// FEATURE 24	folder link: display shares
+function displayShares(){
+	$url = strtok($_SERVER['REQUEST_URI'], '?');
+	$u = (empty($_SERVER['HTTPS']) ? 'http' : 'https') . "://" . $_SERVER['HTTP_HOST'] . PICTAP->url_shared;
+	$out='<h1 style="text-align:center"><i class="ico-sharefolder"></i> Folder Shares</h1>';
+	$out.='<form style="padding:1em" method="get" action="'.$url.'?page=displayShares">';
+	// logger("[displayShares]");
+	$sh = getFolderShares();
+	$out .= '<table>';
+	$out .= '<th>Folder</th><th>Creation Date</th><th>Expiration Date</th>';
+	foreach($sh as $s){
+		$su = $s['shareid'];
+		// $su = $u.PICTAP->url_shared.DIRECTORY_SEPARATOR.$s['shareid'];
+		$out .= '<tr onclick="shareFolderPopup('.$s['dirid'].',\''.$s['dir'].'\',\'true\');">';
+		$out .= '<td><b>'.$s['dir'].'</b></td>';
+		$out .= '<td>'.fdate($s['mt']).'</td>';
+		$out .= '<td>'.fdate($s['et']).'</td>';
+		$out .= '</tr>';
+	}
+	$out .= '</table>';
+	// $out .= '<br><br>';
+	$out .='<div style="padding-top: 2em;"><a class="btn default" style="max-width:170px;font-size:14px" href="'.$url.'">Close</a></div>';
+	$out .= '</form>';
+	htmldoc($out,'','');
+}
+
+
 function postTasks(){
 
 	userAuth();
@@ -2337,8 +2551,7 @@ function postTasks(){
 		}
 		$_POST['r'] = $r.'';
 		$task = 'edit'; $fr=$path=null;
-	}
-	if($task === 'album' && userCan('album')){
+	}else	if($task === 'album' && userCan('album')){
 		$act=post('act');
 		if(!($dbo = openDb())){sendjs(0,'Db Error');}
 		$aid = intval(post('aid'));
@@ -2979,6 +3192,33 @@ function postTasks(){
 		}
 
 
+	// FEATURE 24	folder link: set share folder
+	} else if($task === 'shfld' && userCan('sharefolder')){
+		getPostDir($id,$dirpath);
+
+		$act = post('act');
+		if($act==='add'){
+			// set share
+			$share=post('share');
+			// logger("[postTasks.addFolderShare] d=".$id['dirid'].", share=$share");
+			if(locker(10)){
+				addFolderShare($id['dirid'],$dirpath,$share);
+				locker();//unlocks
+			}
+			// sendjs(0,"Failed to set share");
+		}else if($act==='rem'){
+			// delete share
+			if(locker(10)){
+				remFolderShare($id['dirid']);
+				if(post('upd')==='shareslist') {
+					displayShares();
+				sendjs(1,"Removed share");
+				locker();//unlocks
+				}
+			}
+			// sendjs(0,"Failed to remove share");
+		}
+
 	} else {
 		sendjs(0, ucfirst($task).' Not Allowed');
 	}
@@ -3139,6 +3379,28 @@ function getTasks(){
 			}
 			htmldoc('',$out);
 		}
+	// FEATURE 24	folder link: get existing link
+	} else if(get('shdir') ){
+		userAuth();
+		$shdir = intval(get('shdir'));
+		// logger("[getTasks.shdir] shdir=$shid");
+		$stmt = getFolderShare($shdir);
+
+		// logger("[getTasks.shdir] shdir=$shdir, shareid".$stmt['shareid']);
+		sendJSON([
+			'shdir' => $shdir,
+			'share' => isset($stmt['shareid'])?$stmt['shareid']:null,
+			'puburl' => isset(PICTAP->public_url)?PICTAP->public_url:null
+		]);
+
+	// FEATURE 24	folder link: display all shared folders
+	} else if(get('dspsh') ){
+		// logger("[getTasks.dspsh]");
+		userAuth();
+		// logger("[getTasks.dspsh]");
+		if(userCan('sharefolder')) {
+			displayShares();
+		}
 
 	} else { // front page
 
@@ -3277,11 +3539,18 @@ function htmldoc($config='',$lightbox='',$js=''){
 		echo '<script>const f = '.$lightbox.';sharedView(f);</script></body></html>';
 		die;
 	}
+
+	// FEATURE 24	folder link / gallery mode
+	$sharemode = defined("USER") && isset(USER->sharedirid);
 ?>
 <header id="header" class="open">
 	<div id="topbar">
-		<div class="rbtn" id="lines" title="Menu" onclick="sidebar(2);"><i class="ico-menu"></i></div>
-
+		<?php
+			// FEATURE 24	folder link: hide menu
+			if( ! $sharemode ) {
+				echo '<div class="rbtn" id="lines" title="Menu" onclick="sidebar(2);"><i class="ico-menu"></i></div>';
+			}
+		?>
 		<div id="title"><?php echo PICTAP->title; ?></div>
 		<form id="srchf" autocomplete="off"><input title="Search Text" type="search" id="srch"></form>
 		<div class="rbtn" id="noselect" title="Selection" onclick="cMenu(event, this, 'sels')"><i class="ico-ring"></i></div>
@@ -3299,22 +3568,27 @@ function htmldoc($config='',$lightbox='',$js=''){
 	<div id="breadcrumbs"></div>
 </header>
 
+<?php
+	// FEATURE 24	folder link: hide menu
+	if( ! $sharemode ) {echo '
 <aside id="sidebar">
 	<nav>
-		<div style="position:absolute; left:10px"><?php
-			echo defined('USER') ? USER->user : "Not logged in";
-		?></div>
+				<div style="position:absolute; left:10px">'.
+					(defined("USER") ? USER->user : "Not logged in").'
+				</div>
 		<a id="accounts" title="Accounts" class="rbtn" href="?page=accounts"><i class="ico-user"></i></a>
 		<a id="settings" title="Settings" class="rbtn" href="?page=settings"><i class="ico-set"></i></a>
-		<div class="rbtn" title="Logout" onclick="cMenu(event, this,'exit')"><i class="ico-exit"></i></div>
-		<div id="msortb" title="Menu sort" class="rbtn" onclick="cMenu(event, this,'msort')"><i class="ico-named" id="msorter"></i></div>
+				<div class="rbtn" title="Logout" onclick="cMenu(event, this,\'exit\')"><i class="ico-exit"></i></div>
+				<div id="msortb" title="Menu sort" class="rbtn" onclick="cMenu(event, this,\'msort\')"><i class="ico-named" id="msorter"></i></div>
 	</nav>
 	<div id="menu"></div>
 	<div class="version">
-		<a href="https://github.com/bmw-biker/Pictap-Fork">Pictap Gallery Fork v<?php echo PIC_VER[0]; ?></a><br><br>
-		<a href="https://github.com/junkfix/Pictap">Thanks to Pictap Gallery v<?php echo PIC_VER_ORG[0]; ?></a><br>
+				<a href="https://github.com/bmw-biker/Pictap-Fork">Pictap Gallery Fork v'.PIC_VER[0].'</a><br><br>
+				<a href="https://github.com/junkfix/Pictap">Thanks to Pictap Gallery v'.PIC_VER_ORG[0].'</a><br>
 	</div>
-</aside>
+		</aside>';
+	};
+?>
 
 <main class="rows">
 <div id="uploader"></div>
@@ -3370,6 +3644,14 @@ function htmldoc($config='',$lightbox='',$js=''){
 		}
 	}
 	$ht = "<script>\nlet Dir = $dirs;\n";
+
+	// FEATURE 24	folder link: set shared folder as root
+	if($sharemode){
+		// set pictures share url
+		$p['url_pictures'] = USER->sharepath .'/p';
+		// set thumbs share url
+		$p['url_thumbs'] = USER->sharepath .'/t';
+	}
 
 	$p['can']=roleList($role);
 	foreach(['share','info','download'] as $i){

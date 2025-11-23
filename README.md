@@ -8,6 +8,47 @@ Playing arround with Pictap now for some time I noticed some wishes for improvem
 After some success I'ld like to share the new features and modifications I managed to implement.\
 I hope to have id'd all the modifications correctly in the code so you can identify changes belonging together.
 
+### Version 2.0.9.3
+- **Folder Shares**
+  - Just share a hidden link to a folder instead of cumbersome creation of an album which needs user login.
+  - REMARK: The database will be extended by a new table (see below).
+  - Invited users
+    - Just open the link without login.
+    - All pictures' information will be available as in galery mode.
+    - Will only have access to view that folder and those below.
+    - Will have no access to any functions like album, edit,...
+    - The 3bar menu (top left) is not available.
+  - Inviting users
+    - Just right click on a folder to create or manage a folder share (no need to create an album).
+    - The share mainly consists of a random 20 characters 'id'.
+    - On creation the link will be copied to the clipboard.
+    - If a link already exists for the folder it can be removed or copied to clipboard.
+    - A checkbox to allow sharing has been added to the user rights menu.
+  - Technical
+    - On link creation a folder 'id' will be created in folder 'shared'.
+    - The folder will contain 2 symlinks: Picture path and thumbs path.
+    - A table will be added to the database which holds share 'id', folder id, and some yet unused parameters.
+    - On access by shared link
+      - If the url contains a share 'id' it will be looked up in the database.
+      - If it exists a temporary user with no rights + root to symlink folder will be created.
+      - Further access to usual gallery is done with the cookie set to share 'id' (instead of user name and hash).
+  - Compatiblity (tested with)
+    - Linux on Synology Diskstation running DSM 7.3.1, PHP 8.2.28, MariaDB 10.11.6
+    - Windows 10, Xampp 3.3.0, MariaDB 10.4.32\
+      ATTENTION: Xampp must be run with admin rights to enable symlinks !
+  - TODO
+    - Security issues known
+      - Currently the whole pictures tree will be transmitted as with usual gallery.\
+        This we could avoid.
+    - Security issues to be checked
+      - I'm not so sure yet about the securrity of the new feature.
+      - The 20ch 'id' may be ok.
+      - I used symlinks to protect pictures and thumbs which should be ok.
+      - Is the share 'id' cookie a secure solution ?
+      - 3bar menu is hidden - but could someone hack to enable again ?
+      - Are the (disabled) user rights secure enough ?
+      - Did I accidently add some backdoor by adding the functionality ?
+      - More ?
 ### Version 2.0.9.2
 - **Push message for errors**\
     Push http message to eg. pushover.net if eg. if user gets blocked.

@@ -115,6 +115,16 @@ CREATE TABLE IF NOT EXISTS /*#*/tagfiles (
 	UNIQUE(fileid,tagid)
 );
 
+/* FEATURE 24	folder link: create sql table */
+CREATE TABLE IF NOT EXISTS /*#*/shares (
+	shareid	TEXT NOT NULL,
+	dirid	INTEGER PRIMARY KEY,
+	password	TEXT NOT NULL,
+	mt	INTEGER NOT NULL DEFAULT 0,
+	et	INTEGER NOT NULL DEFAULT 0,
+	FOREIGN KEY(dirid) REFERENCES /*#*/dirs(dirid) ON DELETE CASCADE
+);
+
 PRAGMA foreign_keys = 1;
 
 INSERT OR IGNORE INTO /*#*/dirs (dirid,dir) VALUES (1,'');

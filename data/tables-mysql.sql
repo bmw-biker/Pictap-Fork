@@ -113,6 +113,17 @@ CREATE TABLE IF NOT EXISTS /*#*/tagfiles (
 	FOREIGN KEY (fileid) REFERENCES /*#*/files(fileid) ON DELETE CASCADE,
 	FOREIGN KEY (tagid) REFERENCES /*#*/tags(tagid) ON DELETE CASCADE
 );
+
+/* FEATURE 24	folder link: create sql table */
+CREATE TABLE IF NOT EXISTS /*#*/shares (
+	shareid VARCHAR(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_bin PRIMARY KEY,
+	dirid INT UNSIGNED NOT NULL,
+	password VARCHAR(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_bin NOT NULL,
+	mt INT UNSIGNED DEFAULT 0 NOT NULL,
+	et INT UNSIGNED DEFAULT 0 NOT NULL,
+	FOREIGN KEY (dirid) REFERENCES /*#*/dirs(dirid) ON DELETE CASCADE
+);
+
 INSERT IGNORE INTO /*#*/dirs (dirid,dir) VALUES (1,'');
 
 SET foreign_key_checks = 1;
