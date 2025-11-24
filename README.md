@@ -39,9 +39,16 @@ I hope to have id'd all the modifications correctly in the code so you can ident
     - Windows 10, Xampp 3.3.0, MariaDB 10.4.32\
       ATTENTION: Xampp must be run with admin rights to enable symlinks !
   - TODO
+    - Known issues
+      - Folder display in 2nd row:\
+        Shows one level above the shared folder. This of course shall not happen.
+        By selecting unfortunately this folder and its content files and folders will be shown.
+        At least the pictures and thumbs don't show.
+        Home icon correctly shows the shared folder.
     - Security issues known
       - Currently the whole pictures tree will be transmitted as with usual gallery.\
         This we could avoid.
+      - On each request check if desired folder resides below shared folder (in PHP).
     - Security issues to be checked
       - I'm not so sure yet about the securrity of the new feature.
       - The 20ch 'id' may be ok.
@@ -50,6 +57,7 @@ I hope to have id'd all the modifications correctly in the code so you can ident
       - 3bar menu is hidden - but could someone hack to enable again ?
       - Are the (disabled) user rights secure enough ?
       - Did I accidently add some backdoor by adding the functionality ?
+      - Do we need a .htaccess in 'shared' folder ?
       - More ?
 ### Version 2.0.9.2
 - **Push message for errors**\
