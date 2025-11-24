@@ -23,6 +23,7 @@ I hope to have id'd all the modifications correctly in the code so you can ident
     - The share mainly consists of a random 20 characters 'id'.
     - On creation the link will be copied to the clipboard.
     - If a link already exists for the folder it can be removed or copied to clipboard.
+    - In top left 3bar menu you can lookup all shares under 'Shared Folders'.
     - A checkbox to allow sharing has been added to the user rights menu.
     - An external share url input has been added to settings page. If set it will be use to create the hidden link. Use this if managing shares from local url but want to share on public url.
   - Technical
@@ -37,12 +38,7 @@ I hope to have id'd all the modifications correctly in the code so you can ident
     - Linux on Synology Diskstation running DSM 7.3.1, PHP 8.2.28, MariaDB 10.11.6
     - Windows 10, Xampp 3.3.0, MariaDB 10.4.32\
       ATTENTION: Xampp must be run with admin rights to enable symlinks !
-  - Known issues
-    - Using current .htaccess to restrict access will not work.\
-      The login window will popup.\
-      This is because of the currently new/different cookie name used.
   - TODO
-    - Use same cookie name as gallery or update .htaccess to accept the new cookie.
     - Security issues known
       - Currently the whole pictures tree will be transmitted as with usual gallery.\
         This we could avoid.
