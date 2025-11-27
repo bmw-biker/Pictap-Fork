@@ -3,7 +3,7 @@
 
 const PIC_VER_ORG = ['2.0.9',3]; //[main, config]]
 // FEATURE 24	folder link: increment config version to force sql update
-const PIC_VER = ['2.0.9.3',4]; //[main, config]]
+const PIC_VER = ['2.0.9.4',4]; //[main, config]]
 
 ### Changelog ###
 ### 2.0.8.1
@@ -38,8 +38,15 @@ const PIC_VER = ['2.0.9.3',4]; //[main, config]]
 # FEATURE 25	http_get push message if user gets blocked
 ### 2.0.9.3
 # FEATURE 24	folder link: access folders by direct link
+### 2.0.9.4
+# FIXED 26	folder link: correctly show subfolder thumbs and correctly show subfolders in row 2 (breadcrumbs line)
+# FIXED 27	folder link: reduce transmitted folder tree to shared folder
+
 
 # BUG generate video thumb from MP4 doesn't work on Diskstation DSM7, mysql
+
+# TODO	folder link: sort reduced transmitted folders ?!
+# TODO	exiftool error leads to endless loop (eg. if tool not accessible)
 
 # TODO	the title favicon is working with the svg/png - but when copying browser favorite to Windows desktop the svg/png doesn't work
 
@@ -1071,7 +1078,9 @@ function sendThumb(&$r){
 		}else{
 			$f = implode('/', array_map('rawurlencode', explode('/', thumb_name(joinp($r['dir'],$r['file'])))));
 			cacheHdr();
-			header("Location: ".PICTAP->url_thumbs.$f, true, 301);
+			# FIXED 27	folder link: use share path
+			header("Location: ".getThumbsUrl($f), true, 301);
+			// header("Location: ".PICTAP->url_thumbs.$f, true, 301);
 		}
 	}else{
 		http_response_code(500);
@@ -1098,7 +1107,72 @@ function getPostDir(&$id, &$dirpath){
 	$dirpath = rtrim(PICTAP->path_pictures.'/'.$id['dir'],'/');
 }
 
+
+# FIXED 27	folder link: get thumbs url
+function getThumbsUrl($f){
+	if( ! isset(USER->sharedirid)){
+		// gallery thumbs url
+		return PICTAP->url_thumbs . $f;
+	} else {
+		// shared thumbs url, shared folder is root, remove from file location
+		$f = preg_replace('/^\/'.USER->sharedirname.'/', '', $f);
+		return USER->url_thumbs . $f;
+	}
+}
+
+# FIXED 26	folder link: collect all subfolders
+function getSubfolders($parentid, &$rootname, &$fldsrc, &$flddst, &$modified){
+	foreach ($fldsrc as $r) {
+		if ($parentid === $r['parentid']) {
+			$modified = max($modified, (int)$r['mt']);
+			// remove share folder part
+			$fn = preg_replace('/^'.$rootname.'\//', '', $r['dir']);
+			logger('[getSubfolders] pid:'.$parentid.', rn:'.$rootname.', dir:'.$r['dir'].', fn:'.$fn);
+			$l = [ $fn, intval($r['parentid']), (int)$r['mt'], (int)$r['sz'], (int)$r['qt'] ];
+			$flddst[$r['dirid']] = $l;
+			// collect subfolders of found folder
+			getSubfolders($r['dirid'], $rootname, $fldsrc, $flddst, $modified);
+		}
+	}
+	logger('[getSubfolders.done]');
+}
+
+# FIXED 26	folder link: collect subfolders only, remove parent
+function getShareMenu() {
+	if ( ! isset(USER->sharedirid)) { return null; }
+
+	$menu=[];
+	$rn='';
+	$m=0;
+
+	if(!($dbo = openDb()) ||
+	($stmt = $dbo->run("SELECT dirid, dir, mt, sz, qt, parentid FROM ".PICTAP->db_prefix."dirs d WHERE 1 = 1 $fs ORDER BY dir ASC;", $fp, 2, __LINE__)) === false) {return null;}
+	$stmt = $stmt ?: [];
+
+	// find shared folder
+	foreach($stmt as $r){
+		if (USER->sharedirid === $r['dirid']){
+			// shared folder is root -> '' as name, parent = null
+			$rn = $r['dir'];
+			$l = [ '', null, (int)$r['mt'], (int)$r['sz'], (int)$r['qt'] ];
+			$menu[$r['dirid']] = $l;
+			$m = (int)$r['mt'];
+			break;
+		}
+	}
+	if (sizeof($menu) === 0) { return null; }
+
+	logger('[getShareMenu] sid:'.USER->sharedirid.', '.$rn);
+	getSubfolders(USER->sharedirid, $rn, $stmt, $menu, $m);
+
+	return ['d' => (object) $menu, 'm' => $m, 'a' => [], 'home' => USER->sharedirid, 'root' => USER->sharedirid ];
+}
+
+
 function menuList(){
+	# FIXED 26	folder link: collect subfolders only
+	if ($sm = getShareMenu()) { return $sm; }
+	
 	$m = 0;
 	$menu=[];
 	$root = 0;
@@ -1114,16 +1188,6 @@ function menuList(){
 		$p = intval($r['parentid']);
 		$l = [ $r['dir'], $p, (int)$r['mt'], (int)$r['sz'], (int)$r['qt'] ];
 		$menu[$r['dirid']] = $l;
-		# FEATURE 24	folder link: if USER->dirlink -> $root, $home = USER->dirlink
-		# we only need to set once
-		if ($home != 0) { continue; }
-		if (isset(USER->sharedirid) && USER->sharedirid === $r['dirid']) {
-			$home = USER->sharedirid;
-			// $root = $p;
-			$root = USER->sharedirid;
-			// logger('[menuList] sharedirid:'.USER->sharedirid);
-			continue;
-		}
 		if (userCan('ownfolder')) {
 			if($r['dir'] === $user){
 				$home = (int)$r['dirid'];
@@ -1664,10 +1728,7 @@ function getUser($u){
 }
 
 
-# BUG currently .htaccess refuses requests with no "pictap" cookie - maybe use the same instead of "shareid" ?
-# BUG thumbs access is full folder --- make with symlink ?
 # BUG currently role must include login + alldir --- WHY 
-# BUG currently the whole dir tree is being transmitted
 # FEATURE 24	folder link: create user from folder key
 function getShareUser(){
 	# create a temporary user if we receive a shareid for a folder
@@ -1678,10 +1739,14 @@ function getShareUser(){
 	$cook = 'shid';
 	$cookietimeout = 60*60*8;	
 
-	# try get shareid from request
+	# is there a shareid in request ?
 	$shareid = get('share');
 	// logger('[getShareUser.get] shareid:'.$shareid);
-	if( ! $shareid ) {
+	# FIXED 28	folder link: delete cookie on new request (before a new request showed old one because remembering the old cookie)
+	if($shareid) {
+		// remove any other old cookie
+		unset($_COOKIE[$cook]);
+	} else {
 		# else try get from cookie
 		if(isset($_COOKIE[$cook]) && is_string($_COOKIE[$cook])) {
 			$shareid = $_COOKIE[$cook];
@@ -1697,6 +1762,12 @@ function getShareUser(){
 	$stmt = $dbo->run("SELECT * FROM shares WHERE shareid = ?", [$shareid], 1, __LINE__);
 	$stmt = $stmt ?: [];
 	if ( count($stmt) === 0 ) { unset($_COOKIE[$cook]); return null; }
+	# FIXED 27	folder link: get dir name
+	$dirid = $stmt['dirid'];
+	$stmt = $dbo->run("SELECT * FROM dirs WHERE dirid = ?", [$dirid], 1, __LINE__);
+	$stmt = $stmt ?: [];
+	if ( count($stmt) === 0 ) { unset($_COOKIE[$cook]); return null; }
+	$dirname = $stmt['dir'];
 	
 	// logger('[getShareUser] shareid:'.implode(',',$stmt));
 
@@ -1705,7 +1776,7 @@ function getShareUser(){
 		setcookie($cook, $shareid, time() + $cookietimeout, "/");
 	}
 
-	# create temporary user with special property shareid = dirid and very reduced role = ownFolder
+	# create temporary user with special property sharedirid = dirid and very reduced role = ownFolder
 	# id, username, password: we shouldn't need -> set a fake
 	# hash: here we remember the folder id
 	// $user = (object)['id'=>9999,'user'=>'Hello','pass'=>'','hash'=>'','role'=>0x6+ROLES->ownfolder,'sharedirid'=>$stmt['dirid']];
@@ -1716,7 +1787,10 @@ function getShareUser(){
 		'hash'=>'',
 		'role'=>ROLES->ownfolder+ROLES->login+ROLES->alldir,
 		'sharedirid'=>$stmt['dirid'],
-		'sharepath'=>PICTAP->url_shared .DIRECTORY_SEPARATOR. $shareid
+		# FIXED 27	folder link: add dir name to user
+		'sharedirname'=>$dirname,
+		'url_pictures'=>PICTAP->url_shared.'/'.$shareid.'/p',
+		'url_thumbs'=>PICTAP->url_shared.'/'.$shareid.'/t',
 	];
 	// logger('[getShareUser.user] id:'.$user->id.', user:'.$user->user.', pass:'.$user->pass.', hash:'.$user->hash.', role:'.$user->role.', sharedirid:'.$user->sharedirid, 2);
 	define('USER', $user);
@@ -3647,10 +3721,10 @@ function htmldoc($config='',$lightbox='',$js=''){
 
 	// FEATURE 24	folder link: set shared folder as root
 	if($sharemode){
-		// set pictures share url
-		$p['url_pictures'] = USER->sharepath .'/p';
-		// set thumbs share url
-		$p['url_thumbs'] = USER->sharepath .'/t';
+		// FIXED 26	folder link
+		// point pictures and thumbs share url to share folder
+		$p['url_pictures'] = USER->url_pictures;
+		$p['url_thumbs'] = USER->url_thumbs;
 	}
 
 	$p['can']=roleList($role);
