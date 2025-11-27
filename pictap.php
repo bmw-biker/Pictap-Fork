@@ -1127,14 +1127,14 @@ function getSubfolders($parentid, &$rootname, &$fldsrc, &$flddst, &$modified){
 			$modified = max($modified, (int)$r['mt']);
 			// remove share folder part
 			$fn = preg_replace('/^'.$rootname.'\//', '', $r['dir']);
-			logger('[getSubfolders] pid:'.$parentid.', rn:'.$rootname.', dir:'.$r['dir'].', fn:'.$fn);
+			// logger('[getSubfolders] pid:'.$parentid.', rn:'.$rootname.', dir:'.$r['dir'].', fn:'.$fn);
 			$l = [ $fn, intval($r['parentid']), (int)$r['mt'], (int)$r['sz'], (int)$r['qt'] ];
 			$flddst[$r['dirid']] = $l;
 			// collect subfolders of found folder
 			getSubfolders($r['dirid'], $rootname, $fldsrc, $flddst, $modified);
 		}
 	}
-	logger('[getSubfolders.done]');
+	// logger('[getSubfolders.done]');
 }
 
 # FIXED 26	folder link: collect subfolders only, remove parent
@@ -1162,7 +1162,7 @@ function getShareMenu() {
 	}
 	if (sizeof($menu) === 0) { return null; }
 
-	logger('[getShareMenu] sid:'.USER->sharedirid.', '.$rn);
+	// logger('[getShareMenu] sid:'.USER->sharedirid.', '.$rn);
 	getSubfolders(USER->sharedirid, $rn, $stmt, $menu, $m);
 
 	return ['d' => (object) $menu, 'm' => $m, 'a' => [], 'home' => USER->sharedirid, 'root' => USER->sharedirid ];
