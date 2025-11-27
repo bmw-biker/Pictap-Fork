@@ -8,6 +8,39 @@ Playing arround with Pictap now for some time I noticed some wishes for improvem
 After some success I'ld like to share the new features and modifications I managed to implement.\
 I hope to have id'd all the modifications correctly in the code so you can identify changes belonging together.
 
+## Features
+- **Main Features from Junkfix**
+  - Picture Gallery that shows given folder structure.
+  - Edit, create folders, upload pictures and do simple modifications.
+  - Create albums based on the folder pictures.
+  - User account management.
+  - [Full list here.](https://github.com/junkfix/Pictap).
+- **New Features**
+  - Create hidden link to folder to share without user account.
+  - Split folder names because they affect the thumb size if too long.
+  - Push html message if user account gets blocked.
+  - Updated gps.sql with more locations.
+  - Browser tab title same as Pictap title (configurable).
+  - Create random public url name for public albums.
+  - Redirect to a shared location after login.
+  - Log if user IP gets blocked.
+  - All image info text same brightness.
+  - Adapted gallery folder color to gray design.
+  - Images sort by DTOriginal instead of sort by DTModified.
+  - Folder tree default sort up by name.
+  - Folders in gallery always sort by name.
+  - Pictures sort default configurable.
+- **Planned**
+  - Hidden share folder mode: Restrict to only that folder instead of whole tree below.
+  - Fix Exiftool error (eg not installed) leading to endless loop creating thumbnails.
+
+### Version 2.0.9.4
+- **Fixes**
+  - Hidden share folder mode:
+    - Don't expose whole folder tree but only the shared folder.
+    - Corrected row 2 (breadcrumbs line) to correctly show shared subfolders.
+    - All subfolders and their subfolders are now accessible.
+    - Watching first share then trying another one would show first share because the first cookie wasn't deleted.
 ### Version 2.0.9.3
 - **Folder Shares**
   - Just share a hidden link to a folder instead of cumbersome creation of an album which needs user login.
@@ -34,24 +67,17 @@ I hope to have id'd all the modifications correctly in the code so you can ident
       - If the url contains a share 'id' it will be looked up in the database.
       - If it exists a temporary user with no rights + root to symlink folder will be created.
       - Further access to usual gallery is done with the cookie set to share 'id' (instead of user name and hash).
+      - Only subfolders of share are send to the client. No exposal of whole Pictap directory tree.
   - Compatiblity (tested with)
     - Linux on Synology Diskstation running DSM 7.3.1, PHP 8.2.28, MariaDB 10.11.6
     - Windows 10, Xampp 3.3.0, MariaDB 10.4.32\
       ATTENTION: Xampp must be run with admin rights to enable symlinks !
   - TODO
     - Known issues
-      - Folder display in 2nd row:\
-        Shows one level above the shared folder. This of course shall not happen.
-        By selecting unfortunately this folder and its content files and folders will be shown.
-        At least the pictures and thumbs don't show.
-        Home icon correctly shows the shared folder.
-    - Security issues known
-      - Currently the whole pictures tree will be transmitted as with usual gallery.\
-        This we could avoid.
-      - On each request check if desired folder resides below shared folder (in PHP).
+      - If exiftool doesn't work (eg. not installed) then Pictap will hang in endless loop creating thumbnail pictures.
     - Security issues to be checked
-      - I'm not so sure yet about the securrity of the new feature.
-      - The 20ch 'id' may be ok.
+      - I'm not so sure yet about the security of the new feature.
+      - The 20char hidden link 'id' may be ok.
       - I used symlinks to protect pictures and thumbs which should be ok.
       - Is the share 'id' cookie a secure solution ?
       - 3bar menu is hidden - but could someone hack to enable again ?
@@ -138,16 +164,6 @@ I hope to have id'd all the modifications correctly in the code so you can ident
   The new gps.sql I converted from its json files.\
   Note that it obviously must be bigger than the original which appears to be no issue for my DS224+.\
   Many thanks to [umer2001](https://github.com/umer2001).\
-
-### Currently working on
-- **Try to make folders public accessable**
-    - Public albums are already possible.
-    - Although they have some slight side effect:
-        - We have to create an album for makeing them public.
-        - Pictures currently don't show any information (location,...)
-        - We cannot use the folder structure.
-    - What if we just could share some subfolder with no rights but display images.
-    - Currently trying to understand and solve some security issues.
 <br><br>
 
 
