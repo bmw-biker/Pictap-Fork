@@ -3,7 +3,7 @@
 
 const PIC_VER_ORG = ['2.0.9',3]; //[main, config]]
 // FEATURE 24	folder link: increment config version to force sql update
-const PIC_VER = ['2.0.9.4',4]; //[main, config]]
+const PIC_VER = ['2.0.9.6',4]; //[main, config]]
 
 ### Changelog ###
 ### 2.0.8.1
@@ -41,9 +41,16 @@ const PIC_VER = ['2.0.9.4',4]; //[main, config]]
 ### 2.0.9.4
 # FIXED 26	folder link: correctly show subfolder thumbs and correctly show subfolders in row 2 (breadcrumbs line)
 # FIXED 27	folder link: reduce transmitted folder tree to shared folder
+# FIXED 28	folder link: Watching first share then trying another one would show first share because the first cookie wasn't deleted.
+### 2.0.9.5
+# FIXED 29	Thumb wouldn't be recreated if previously an empty one has been created due to eg ffmpeg failure
+### 2.0.9.6
+# FIXED 30  	folder link: regex on path only works with ~ as regex delimiter
+# FEATURE 31	folder link: show root name with title
+# FIXED 32		folder names: always replace special chars with spaces
 
 
-# BUG generate video thumb from MP4 doesn't work on Diskstation DSM7, mysql
+# BUG Clear image cache automatically when rescanning folders/pictures or recreating thumbs.
 
 # TODO	folder link: sort reduced transmitted folders ?!
 # TODO	exiftool error leads to endless loop (eg. if tool not accessible)
@@ -160,6 +167,9 @@ if(PTM){ //main page, not a shared album view
 	foreach ($stmt as $r) {
 		$an = htmlspecialchars($r['name']);
 		unset($r['name']);
+		# REMARK		XXXXXXXXXXXXXXXX put album image data here (or by dbo->run) ???
+		$r['city'] = 'unknown';
+
 		$q['items'][] = $r;
 		$i++;
 	}
@@ -704,6 +714,8 @@ function getExif(&$r){
 	openDb(-1);
 	if(logger() || locker(30)){
 		ignore_user_abort(true);
+		$output = '';
+		$res = '';
 		$exif = json_decode(shell_exec(escapeshellarg(PICTAP->bin_exiftool).' -n -json '.$lf.' '.escapeshellarg($path)), true);
 		locker();//unlocks
 	}
@@ -1115,7 +1127,9 @@ function getThumbsUrl($f){
 		return PICTAP->url_thumbs . $f;
 	} else {
 		// shared thumbs url, shared folder is root, remove from file location
-		$f = preg_replace('/^\/'.USER->sharedirname.'/', '', $f);
+		# FIXED 30	use ~ regex on path 
+		$f = preg_replace('~^/'.USER->sharedirname.'~', '', $f);
+		// $f = preg_replace('/^\/'.USER->sharedirname.'/', '', $f);
 		return USER->url_thumbs . $f;
 	}
 }
@@ -1126,7 +1140,9 @@ function getSubfolders($parentid, &$rootname, &$fldsrc, &$flddst, &$modified){
 		if ($parentid === $r['parentid']) {
 			$modified = max($modified, (int)$r['mt']);
 			// remove share folder part
-			$fn = preg_replace('/^'.$rootname.'\//', '', $r['dir']);
+			# FIXED 30  folder link: regex on path only works with ~ as regex delimiter
+			$fn = preg_replace('~^'.$rootname.'/~', '', $r['dir']);
+			// $fn = preg_replace('/^'.$rootname.'\//', '', $r['dir']);  path slash / doesn't work
 			// logger('[getSubfolders] pid:'.$parentid.', rn:'.$rootname.', dir:'.$r['dir'].', fn:'.$fn);
 			$l = [ $fn, intval($r['parentid']), (int)$r['mt'], (int)$r['sz'], (int)$r['qt'] ];
 			$flddst[$r['dirid']] = $l;
@@ -1154,7 +1170,9 @@ function getShareMenu() {
 		if (USER->sharedirid === $r['dirid']){
 			// shared folder is root -> '' as name, parent = null
 			$rn = $r['dir'];
-			$l = [ '', null, (int)$r['mt'], (int)$r['sz'], (int)$r['qt'] ];
+			# FEATURE 31	folder link: show root name
+			$l = [ basename($rn), null, (int)$r['mt'], (int)$r['sz'], (int)$r['qt'] ];
+			// $l = [ '', null, (int)$r['mt'], (int)$r['sz'], (int)$r['qt'] ];
 			$menu[$r['dirid']] = $l;
 			$m = (int)$r['mt'];
 			break;
@@ -1563,7 +1581,9 @@ function makeThumb(&$r, $forcethumb = 0){
 	$nobad = PICTAP->skip_corrupt;
 	$thm = PICTAP->path_thumbs . thumb_name($rp, $size);
 	makeDir(dirnm($thm));
-	if(file_exists($thm)){
+
+	// FIXED 29	Thumb wouldn't be recreated if previously an empty one has been created due to eg ffmpeg failure
+	if(file_exists($thm) && filesize($thm) > 0){
 		if(filemtime($thm) === $mtime && ($forcethumb == 0 /*|| $r['th']==0 */ )){
 			return thumbOk($r,$thm);
 		}
@@ -1596,7 +1616,6 @@ function makeThumb(&$r, $forcethumb = 0){
 
 function genThumbVid($org, $thm, $ts, &$r, $mtime) {
 	$cmd = ((PHP_SHLIB_SUFFIX==='dll')?'':'nice -n 19 ').escapeshellarg(PICTAP->bin_ffmpeg).' -y -hide_banner -ss 0 -t 7 -threads 1 -i ' . escapeshellarg($org) . ' -threads 1 -an -vf "fps=2,scale=iw*sar:ih,scale=w='.$ts.':h='.$ts.':force_original_aspect_ratio=decrease,setsar=1:1" -loop 0 -quality 40 ' . escapeshellarg($thm) . ' 2>&1';
-
 	$output = [];
 	$failed = 1;
 
@@ -1720,6 +1739,7 @@ function getUser($u){
 	if($u){
 		foreach(PICTAP->users as $id=>$user) {
 			if(strtolower($user[0]) === $u && $id>0) {
+				// REMARK $id = UID, $user[0] = name, $user[1] = password, $user[2] = token, $user[3] = role
 				return (object)['id'=>(int)$id,'user'=>$user[0],'pass'=>$user[1],'hash'=>$user[0].'-'.md5($user[1] . $user[2] ),'role'=>$user[3]];
 			}
 		}
@@ -1792,6 +1812,7 @@ function getShareUser(){
 		'url_pictures'=>PICTAP->url_shared.'/'.$shareid.'/p',
 		'url_thumbs'=>PICTAP->url_shared.'/'.$shareid.'/t',
 	];
+	// logger('[getShareUser] user:'.implode(',',$user));
 	// logger('[getShareUser.user] id:'.$user->id.', user:'.$user->user.', pass:'.$user->pass.', hash:'.$user->hash.', role:'.$user->role.', sharedirid:'.$user->sharedirid, 2);
 	define('USER', $user);
 
@@ -1859,6 +1880,8 @@ function userAuth($html=0){
 					$authfile = PICTAP->path_data .'/auth/'.$user->hash.'.txt';
 					setcookie($cook, $user->hash, time()+60*60*24*PICTAP->login_remember, "/");
 					saveLogin($authfile);
+					# FEATURE 25	just for test
+					// push_message($u.' just logged in from IP '.$_SERVER['REMOTE_ADDR']);
 				} else {
 					if($valid){$u=$p='*';}
 					$t='['.date("Y-m-d H:i:s").'] ['.$_SERVER['REMOTE_ADDR'].'] '.$u.' - '.$p.' '.htmlspecialchars($_SERVER['HTTP_USER_AGENT'])."\n";
@@ -1905,6 +1928,8 @@ function userAuth($html=0){
 			$setup->users[$user->id][2] = bin2hex(random_bytes(4));
 			myConfig((array)$setup);
 		}
+		# FEATURE 25	just for test
+		// push_message($user->user.' just logged out from IP '.$_SERVER['REMOTE_ADDR']);
 		sendjs(0,'login');
 	}
 
@@ -3325,6 +3350,7 @@ function getTasks(){
 	}else if(get('fthmb')){//folder thumb
 		userAuth();
 		$id = intval(get('fthmb'));
+		// logger('[getTasks fthmb] ' . $id);
 		if(!$id){http_response_code(400); exit;}
 		if(($d = getDirRow($id))){
 			$c = "d.dirid = ?";
@@ -3339,6 +3365,7 @@ function getTasks(){
 				$epath = addcslashes($d['dir'], '%_');
 				if (($stmt = $dbo->run("SELECT f.*, d.dir FROM {$pp}files f INNER JOIN {$pp}dirs d USING(dirid) WHERE f.ft <> 0 AND dir LIKE ? ORDER BY tk DESC Limit 1", ["$epath/%"], 1, __LINE__)) === false) {http_response_code(500); exit;}
 			}
+			// logger(var_export($stmt, true));
 			sendThumb($stmt);
 		}else{
 			http_response_code(500);
@@ -3478,6 +3505,9 @@ function getTasks(){
 
 	} else { // front page
 
+		# MODIFIED ######## check show folder without login
+		# here we get without login
+		// logger('[getTasks, GET Frontpage] query:'.strtok($_SERVER['REQUEST_URI'], '-'));
 		userAuth(true);
 		htmldoc();
 
@@ -3513,6 +3543,19 @@ function sfile($f){
 				$p = $q;
 			}
 		}
+	// MODIFIED 90 ###########  favicon.ico missing for browser favorite eg. firefox !!!!!!!!!!   DOES NOT WORK: ISSUE is with windows icons, sometimes ok, sometimes wrong icons
+	// }else if($f=='ico'){
+	// 	header('Content-Type: image/x-icon');
+	// 	// TODO put base64_decode() icon here
+	// 	$p = '';
+	// 	// TODO use separate config parameter or only one checkbox - to use a fixed favicon.svg/png/ico which can be allowed by htaccess 
+	// 	if(!empty(PICTAP->favicon_svg)){
+	// 		$q = file_get_contents(dirnm(__FILE__) .'/'.preg_replace('/\..+$/', '.ico', PICTAP->favicon_svg));
+	// 		if($q !== false){
+	// 			logger('[sfile] ico file read', 2);
+	// 			$p = $q;
+	// 		}
+	// 	}
 	}else if($f=='sw'){
 		header('Content-Type: application/javascript');
 		$p = '
@@ -3587,8 +3630,11 @@ function htmldoc($config='',$lightbox='',$js=''){
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=yes">
 <meta name="robots" content="noindex, nofollow">
+<!-- MODIFIED 90 ###########  favicon.ico missing for browser favorite eg. firefox !!!!!!!!!!   DOES NOT WORK: ISSUE is with windows icons, sometimes ok, sometimes wrong icons -->
+<!--link rel="icon" type="image/x-icon" href="'.$u.'ico" /-->
+<!--link rel="icon" href="/pictap/favicon.ico" sizes="32x32" /-->
 <link rel="icon" type="image/svg+xml" href="'.$u.'svg" />
-<link rel="apple-touch-icon" sizes="180x180" href="'.$u.'png">
+<link rel="apple-touch-icon" sizes="180x180" href="'.$u.'png" />
 <link rel="stylesheet" href="pictap.css?'.filemtime(dirnm(__FILE__).'/pictap.css').'">
 <script src="pictap.js?'.filemtime(dirnm(__FILE__).'/pictap.js').'"></script>
 ';
@@ -3645,21 +3691,21 @@ function htmldoc($config='',$lightbox='',$js=''){
 <?php
 	// FEATURE 24	folder link: hide menu
 	if( ! $sharemode ) {echo '
-<aside id="sidebar">
-	<nav>
+		<aside id="sidebar">
+			<nav>
 				<div style="position:absolute; left:10px">'.
 					(defined("USER") ? USER->user : "Not logged in").'
 				</div>
-		<a id="accounts" title="Accounts" class="rbtn" href="?page=accounts"><i class="ico-user"></i></a>
-		<a id="settings" title="Settings" class="rbtn" href="?page=settings"><i class="ico-set"></i></a>
+				<a id="accounts" title="Accounts" class="rbtn" href="?page=accounts"><i class="ico-user"></i></a>
+				<a id="settings" title="Settings" class="rbtn" href="?page=settings"><i class="ico-set"></i></a>
 				<div class="rbtn" title="Logout" onclick="cMenu(event, this,\'exit\')"><i class="ico-exit"></i></div>
 				<div id="msortb" title="Menu sort" class="rbtn" onclick="cMenu(event, this,\'msort\')"><i class="ico-named" id="msorter"></i></div>
-	</nav>
-	<div id="menu"></div>
-	<div class="version">
+			</nav>
+			<div id="menu"></div>
+			<div class="version">
 				<a href="https://github.com/bmw-biker/Pictap-Fork">Pictap Gallery Fork v'.PIC_VER[0].'</a><br><br>
 				<a href="https://github.com/junkfix/Pictap">Thanks to Pictap Gallery v'.PIC_VER_ORG[0].'</a><br>
-	</div>
+			</div>
 		</aside>';
 	};
 ?>

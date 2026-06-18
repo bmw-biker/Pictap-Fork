@@ -248,7 +248,18 @@ function fullDate(t){
 
 
 function getFilename(p){
-	return p.split('/').reverse()[0];
+	// FIXED 32	folder names: always replace special chars with spaces
+	// return p.split('/').reverse()[0];
+	let dn = p.split('/').reverse()[0];
+
+	if (_p.hasOwnProperty('name_regex') && (_p.name_regex.length >= 3) && _p.name_regex.includes('/')) {
+		let splt = _p.name_regex.split('/');
+		if (splt.length == 4) {
+			// regex example: /_/ /g
+			dn = dn.replace(new RegExp(splt[1],splt[3]), splt[2]);
+		}
+	}
+	return dn;
 }
 
 function removeExt(url){
@@ -2816,12 +2827,7 @@ function act_refresh(id){
 
 function act_info(el,dir){
 	const d = Dir.d[_att(el, 'data-d')];
-	let p = '/' + d[0];
-	let m;
-	const n = {
-		Name: _qs('f-nm',el).textContent,
-		Size: _qs('f-sz',el).textContent,
-	};
+	let p = '/' + d[0]; let m;
 	if(dir){
 		p = p.substring(0, p.lastIndexOf('/'));
 		m = d[2];
@@ -2829,6 +2835,10 @@ function act_info(el,dir){
 		m = el.href.split('=').pop();
 	}
 
+	const n = {
+		Name: _qs('f-nm',el).textContent,
+		Size: _qs('f-sz',el).textContent,
+	};
 
 	let v;
 	if(v = _qs('f-qt',el)){
@@ -3422,6 +3432,14 @@ function expandMenu(){
 		bc(Dir.home,1);
 	}
 
+	// FEATURE 31	folder link: show root name with title
+	if (Dir.d[Dir.home][0] != "") {
+		const t = _id("title");
+		let dn = getFilename(Dir.d[Dir.home][0]);
+		if ( ! t.innerHTML.includes(dn)) {
+			t.innerHTML += " [" + getFilename(Dir.d[Dir.home][0]) + "]";
+		}
+	}
 
 	let f = _qsa("#menu li[data-id]");
 	f.forEach(function(li){
@@ -3905,14 +3923,14 @@ async function media(j, n, f, m ){
 
 			// FEATURE 12	folder thumbnail sizes are different in height in gallery tiles view, due to very long names -> split folder names
 			let dn = getFilename(dirpath);
-			// FIXED 17		gallery didn't show any folders if name_regex didn't exist (after update from 2.0.8 to 2.0.8.1-3)
-			if (_p.hasOwnProperty('name_regex') && (_p.name_regex.length >= 3) && _p.name_regex.includes('/')) {
-				let splt = _p.name_regex.split('/');
-				if (splt.length == 4) {
-					// regex example: /_/ /g
-					dn = dn.replace(new RegExp(splt[1],splt[3]), splt[2]);
-				}
-			}
+			// // FIXED 17		gallery didn't show any folders if name_regex didn't exist (after update from 2.0.8 to 2.0.8.1-3)
+			// if (_p.hasOwnProperty('name_regex') && (_p.name_regex.length >= 3) && _p.name_regex.includes('/')) {
+			// 	let splt = _p.name_regex.split('/');
+			// 	if (splt.length == 4) {
+			// 		// regex example: /_/ /g
+			// 		dn = dn.replace(new RegExp(splt[1],splt[3]), splt[2]);
+			// 	}
+			// }
 
 			ah.appendChild(_ce('div',{'class': 'info'},0,[
 				_ce('f-nm',0,{textContent: dn}),
@@ -3986,7 +4004,9 @@ async function media(j, n, f, m ){
 		if(v.ft){
 			_att(ah,'data-pswp-width', v.w);
 			_att(ah,'data-pswp-height', v.h);
-			_att(ah,'data-tk', v.t);
+			
+			_att(ah,'data-tk', v.t); // ADDED XXXXXXXXXX by junkfix ????   what is that ?????
+
 			const im = _ce('img', {loading: 'lazy'});
 			im.onload = imld;
 			if(v.th == 2){updrefresh = 1; navi.reload = 1;}
