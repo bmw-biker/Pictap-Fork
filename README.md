@@ -34,6 +34,15 @@ I hope to have id'd all the modifications correctly in the code so you can ident
   - Hidden share folder mode: Restrict to only that folder instead of whole tree below.
   - Fix Exiftool error (eg not installed) leading to endless loop creating thumbnails.
 
+### Version 2.0.9.6
+- **New**
+  - Folder link: show root name with Pictap title
+- **Fixes**
+  - Folder link: regex on path only works with ~ as regex delimiter
+  - Folder names: always replace special chars with spaces
+### Version 2.0.9.5
+- **Fixes**
+  - Thumb wouldn't be recreated if previously an empty one has been created due to eg ffmpeg failure
 ### Version 2.0.9.4
 - **Fixes**
   - Hidden share folder mode:
